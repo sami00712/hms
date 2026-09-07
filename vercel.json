@@ -4,12 +4,6 @@
   "installCommand": "npm install && prisma generate && prisma db push --accept-data-loss",
   "framework": "nextjs",
   "regions": ["iad1"],
-  "env": {
-    "NEXTAUTH_URL": "@NEXTAUTH_URL",
-    "DATABASE_URL": "@DATABASE_URL",
-    "DIRECT_URL": "@DIRECT_URL",
-    "NEXTAUTH_SECRET": "@NEXTAUTH_SECRET"
-  },
   "crons": [
     {
       "path": "/api/seed",
