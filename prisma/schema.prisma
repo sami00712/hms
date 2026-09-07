@@ -1,0 +1,318 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  ADMIN
+  RECEPTIONIST
+  DOCTOR
+  LAB
+  PHARMACIST
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CHECKED_IN
+  COMPLETED
+  CANCELLED
+}
+
+enum LabOrderStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
+enum InventoryTxnType {
+  IN
+  OUT
+  ADJUSTMENT
+}
+
+enum BedStatus {
+  AVAILABLE
+  OCCUPIED
+  MAINTENANCE
+}
+
+enum OPDStatus {
+  WAITING
+  IN_CONSULTATION
+  COMPLETED
+  CANCELLED
+}
+
+enum WeekDay {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum ServiceCategory {
+  OPD_CONSULTATION
+  FOLLOW_UP
+  BED_CHARGE_PER_DAY
+  PROCEDURE
+  OTHER
+}
+
+model User {
+  id            String   @id @default(cuid())
+  name          String
+  email         String   @unique
+  password      String
+  role          Role
+  specialty     String? // for doctors
+  phone         String?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  appointmentsAsDoctor Appointment[]   @relation("DoctorAppointments")
+  prescriptions        Prescription[]
+  labOrdersRequested   LabOrder[]      @relation("DoctorLabOrders")
+  admissionsAsDoctor   Admission[]     @relation("DoctorAdmissions")
+  opdVisitsAsDoctor    OPDVisit[]      @relation("DoctorOPDVisits")
+  doctorAvailabilities DoctorAvailability[]
+  notifications        Notification[]
+}
+
+model Patient {
+  id           String   @id @default(cuid())
+  mrNumber     String   @unique
+  name         String
+  gender       String
+  dob          DateTime?
+  phone        String
+  address      String?
+  bloodGroup   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  appointments  Appointment[]
+  prescriptions Prescription[]
+  labOrders     LabOrder[]
+  invoices      Invoice[]
+  admissions    Admission[]
+  opdVisits     OPDVisit[]
+}
+
+model Appointment {
+  id          String            @id @default(cuid())
+  patientId   String
+  patient     Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId    String
+  doctor      User              @relation("DoctorAppointments", fields: [doctorId], references: [id])
+  date        DateTime
+  reason      String?
+  status      AppointmentStatus @default(SCHEDULED)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  prescriptions Prescription[]
+}
+
+model Medicine {
+  id            String   @id @default(cuid())
+  name          String
+  category      String?
+  unit          String   @default("tablet")
+  unitPrice     Float
+  stock         Int      @default(0)
+  reorderLevel  Int      @default(10)
+  expiryDate    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  prescriptionItems    PrescriptionItem[]
+  inventoryTransactions InventoryTransaction[]
+}
+
+model InventoryTransaction {
+  id          String           @id @default(cuid())
+  medicineId  String
+  medicine    Medicine         @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+  type        InventoryTxnType
+  quantity    Int
+  reason      String?
+  createdAt   DateTime         @default(now())
+}
+
+model Prescription {
+  id            String   @id @default(cuid())
+  patientId     String
+  patient       Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId      String
+  doctor        User     @relation(fields: [doctorId], references: [id])
+  appointmentId String?
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+  opdVisitId    String?
+  opdVisit      OPDVisit? @relation(fields: [opdVisitId], references: [id])
+  notes         String?
+  diagnosis     String?
+  dispensed     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  items PrescriptionItem[]
+}
+
+model PrescriptionItem {
+  id             String       @id @default(cuid())
+  prescriptionId String
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  medicineId     String
+  medicine       Medicine     @relation(fields: [medicineId], references: [id])
+  dosage         String
+  duration       String
+  quantity       Int
+}
+
+model LabTest {
+  id        String     @id @default(cuid())
+  name      String
+  price     Float
+  createdAt DateTime   @default(now())
+
+  labOrders LabOrder[]
+}
+
+model LabOrder {
+  id          String         @id @default(cuid())
+  patientId    String
+  patient     Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId    String
+  doctor      User           @relation("DoctorLabOrders", fields: [doctorId], references: [id])
+  labTestId   String
+  labTest     LabTest        @relation(fields: [labTestId], references: [id])
+  opdVisitId  String?
+  opdVisit    OPDVisit?      @relation(fields: [opdVisitId], references: [id])
+  status      LabOrderStatus @default(PENDING)
+  result      String?
+  resultFile  String?
+  orderedAt   DateTime       @default(now())
+  completedAt DateTime?
+}
+
+model Invoice {
+  id          String        @id @default(cuid())
+  patientId   String
+  patient     Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  totalAmount Float
+  paidAmount  Float         @default(0)
+  status      InvoiceStatus @default(UNPAID)
+  sourceType  String?       // "OPD" | "LAB" | "PRESCRIPTION" | "ADMISSION" | "MANUAL"
+  sourceId    String?       // id of the OPDVisit / LabOrder / Prescription / Admission
+  createdAt   DateTime      @default(now())
+
+  items InvoiceItem[]
+}
+
+model InvoiceItem {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Int     @default(1)
+  amount      Float
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model ServiceRate {
+  id        String          @id @default(cuid())
+  name      String
+  category  ServiceCategory
+  price     Float
+  active    Boolean         @default(true)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  opdVisits OPDVisit[]
+}
+
+model Ward {
+  id    String @id @default(cuid())
+  name  String
+  beds  Bed[]
+}
+
+model Bed {
+  id        String    @id @default(cuid())
+  wardId    String
+  ward      Ward      @relation(fields: [wardId], references: [id])
+  bedNumber String
+  status    BedStatus @default(AVAILABLE)
+  createdAt DateTime  @default(now())
+
+  admissions Admission[]
+
+  @@unique([wardId, bedNumber])
+}
+
+model Admission {
+  id            String    @id @default(cuid())
+  patientId     String
+  patient       Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  bedId         String
+  bed           Bed       @relation(fields: [bedId], references: [id])
+  doctorId      String
+  doctor        User      @relation("DoctorAdmissions", fields: [doctorId], references: [id])
+  admittedAt    DateTime  @default(now())
+  dischargedAt  DateTime?
+  notes         String?
+}
+
+model OPDVisit {
+  id            String      @id @default(cuid())
+  tokenNumber   Int
+  patientId     String
+  patient       Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId      String?
+  doctor        User?       @relation("DoctorOPDVisits", fields: [doctorId], references: [id])
+  serviceRateId String
+  serviceRate   ServiceRate @relation(fields: [serviceRateId], references: [id])
+  status        OPDStatus   @default(WAITING)
+  visitDate     DateTime    @default(now())
+  createdAt     DateTime    @default(now())
+  prescriptions Prescription[]
+  labOrders     LabOrder[]
+}
+
+model DoctorAvailability {
+  id        String   @id @default(cuid())
+  doctorId  String
+  doctor    User     @relation(fields: [doctorId], references: [id])
+  day       WeekDay
+  startTime DateTime
+  endTime   DateTime
+  isAvailable Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([doctorId, day])
+}
