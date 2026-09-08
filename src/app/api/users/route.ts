@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   const users = await prisma.user.findMany({
     where: roleFilter ? { role: roleFilter as any } : undefined,
     orderBy: { createdAt: "desc" },
-    select: { id: true, name: true, email: true, role: true, active: true, specialty: true, createdAt: true }
+    select: { id: true, name: true, email: true, role: true, active: true, specialty: true, createdAt: true, departmentId: true }
   });
   return NextResponse.json(users);
 }
@@ -29,8 +29,7 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { name, email, password, role, specialty, phone } = body;
-
+  const { name, email, password, role, specialty, phone, departmentId } = body;
   if (!name || !email || !password || !role) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
@@ -39,7 +38,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const user = await prisma.user.create({
-      data: { name, email, password: hashed, role, specialty, phone }
+      data: { name, email, password: hashed, role, specialty, phone, departmentId }
     });
     return NextResponse.json({ id: user.id, name: user.name, email: user.email, role: user.role });
   } catch (e: any) {

@@ -15,15 +15,33 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await req.json();
+
+  const labOrder = await prisma.labOrder.findUnique({
+    where: { id },
+    include: { invoice: true }
+  });
+
+  if (!labOrder) {
+    return NextResponse.json({ error: "Lab order not found" }, { status: 404 });
+  }
+
+  if (body.status && body.status !== "CANCELLED") {
+    if (!labOrder.invoice || labOrder.invoice.status !== "PAID") {
+      return NextResponse.json({
+        error: "This test has not been paid for yet. Please direct the patient to Reception for billing."
+      }, { status: 400 });
+    }
+  }
+
   const data: any = {};
   if (body.status) data.status = body.status;
   if (body.result !== undefined) data.result = body.result;
   if (body.status === "COMPLETED") data.completedAt = new Date();
 
-  const labOrder = await prisma.labOrder.update({
+  const updated = await prisma.labOrder.update({
     where: { id },
     data,
-    include: { doctor: true, patient: true }
+    include: { doctor: true, patient: true, labTest: true }
   });
 
   if (body.status === "COMPLETED") {
@@ -35,9 +53,9 @@ export async function PATCH(
     const notificationPromises = [
       prisma.notification.create({
         data: {
-          userId: labOrder.doctorId,
+          userId: updated.doctorId,
           title: "Lab Result Ready",
-          message: `Result ready for ${labOrder.patient.name}'s lab test.`
+          message: `Result ready for ${updated.patient.name}'s lab test "${updated.labTest.name}".`
         }
       })
     ];
@@ -48,7 +66,7 @@ export async function PATCH(
           data: {
             userId: receptionist.id,
             title: "Lab Result Ready",
-            message: `Lab test result ready for ${labOrder.patient.name}.`
+            message: `Lab test result ready for ${updated.patient.name} — ${updated.labTest.name}.`
           }
         })
       );
@@ -57,5 +75,5 @@ export async function PATCH(
     await Promise.all(notificationPromises);
   }
 
-  return NextResponse.json(labOrder);
+  return NextResponse.json(updated);
 }

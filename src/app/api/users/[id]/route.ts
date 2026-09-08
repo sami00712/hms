@@ -21,7 +21,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       role: body.role,
       specialty: body.specialty,
       phone: body.phone,
-      active: body.active
+      active: body.active,
+      departmentId: body.departmentId
     }
   });
   return NextResponse.json(user);

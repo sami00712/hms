@@ -9,10 +9,16 @@ export async function GET(req: NextRequest) {
 
   const pendingOnly = req.nextUrl.searchParams.get("pending") === "true";
   const statusFilter = req.nextUrl.searchParams.get("status");
+  const includeInvoice = req.nextUrl.searchParams.get("includeInvoice") === "true";
 
   const labOrders = await prisma.labOrder.findMany({
     where: pendingOnly ? { status: { in: ["PENDING", "IN_PROGRESS"] } } : statusFilter ? { status: statusFilter as any } : undefined,
-    include: { patient: true, doctor: true, labTest: true },
+    include: {
+      patient: true,
+      doctor: true,
+      labTest: true,
+      ...(includeInvoice ? { invoice: { include: { items: true } } } : {})
+    },
     orderBy: { orderedAt: "desc" },
     take: 100
   });
@@ -35,26 +41,32 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
-  const labOrder = await prisma.labOrder.create({
-    data: { patientId, doctorId, labTestId },
-    include: { labTest: true }
-  });
+  const labTest = await prisma.labTest.findUnique({ where: { id: labTestId } });
+  if (!labTest) {
+    return NextResponse.json({ error: "Lab test not found" }, { status: 404 });
+  }
 
-  // Auto-generate billing invoice for the lab test
-  await prisma.invoice.create({
-    data: {
-      patientId,
-      totalAmount: labOrder.labTest.price,
-      status: "UNPAID",
-      sourceType: "LAB",
-      sourceId: labOrder.id,
-      items: {
-        create: [{ description: `Lab Test - ${labOrder.labTest.name}`, quantity: 1, amount: labOrder.labTest.price }]
+  const result = await prisma.$transaction(async (tx) => {
+    const invoice = await tx.invoice.create({
+      data: {
+        patientId,
+        totalAmount: labTest.price,
+        status: "UNPAID",
+        sourceType: "LAB",
+        items: {
+          create: [{ description: `Lab Test - ${labTest.name}`, quantity: 1, amount: labTest.price }]
+        }
       }
-    }
+    });
+
+    const labOrder = await tx.labOrder.create({
+      data: { patientId, doctorId, labTestId, invoiceId: invoice.id },
+      include: { labTest: true, invoice: true }
+    });
+
+    return labOrder;
   });
 
-  // Send notifications to doctor and receptionist
   const [receptionist] = await prisma.user.findMany({
     where: { role: "RECEPTIONIST", active: true },
     select: { id: true }
@@ -65,7 +77,7 @@ export async function POST(req: Request) {
       data: {
         userId: doctorId,
         title: "Lab Test Ordered",
-        message: `Lab test "${labOrder.labTest.name}" ordered for patient.`
+        message: `Lab test "${result.labTest.name}" ordered for patient.`
       }
     })
   ];
@@ -84,5 +96,5 @@ export async function POST(req: Request) {
 
   await Promise.all(notificationPromises);
 
-  return NextResponse.json(labOrder);
+  return NextResponse.json(result);
 }

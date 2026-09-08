@@ -1,13 +1,7 @@
 {
   "buildCommand": "next build",
   "devCommand": "next dev",
-  "installCommand": "npm install && npx prisma generate && npx prisma db push --accept-data-loss",
+  "installCommand": "npm install",
   "framework": "nextjs",
-  "regions": ["iad1"],
-  "env": {
-    "DATABASE_URL": "@DATABASE_URL",
-    "DIRECT_URL": "@DIRECT_URL",
-    "NEXTAUTH_URL": "@NEXTAUTH_URL",
-    "NEXTAUTH_SECRET": "@NEXTAUTH_SECRET"
-  }
+  "regions": ["iad1"]
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 
 type Patient = { id: string; name: string; mrNumber: string; phone: string; gender: string };
 type ServiceRate = { id: string; name: string; category: string; price: number; active: boolean };
@@ -9,7 +8,6 @@ type Doctor = { id: string; name: string };
 type OPDVisit = { id: string; tokenNumber: number; patient: { name: string; mrNumber: string }; doctor: { name: string } | null; serviceRate: { name: string; price: number }; status: string; visitDate: string };
 
 export default function OPDPage() {
-  const router = useRouter();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [rates, setRates] = useState<ServiceRate[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -22,11 +20,11 @@ export default function OPDPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("/api/service-rates").then(r => r.json()).then(data => {
+    fetch("/api/service-rates").then(r => r.ok ? r.json() : []).then(data => {
       setRates(data.filter((r: ServiceRate) => r.active && (r.category === "OPD_CONSULTATION" || r.category === "FOLLOW_UP")));
-    });
-    fetch("/api/patients").then(r => r.json()).then(setPatients);
-    fetch("/api/users?role=DOCTOR").then(r => r.json()).then(setDoctors);
+    }).catch(() => {});
+    fetch("/api/patients").then(r => r.ok ? r.json() : []).then(setPatients).catch(() => {});
+    fetch("/api/users?role=DOCTOR").then(r => r.ok ? r.json() : []).then(setDoctors).catch(() => {});
     fetchOPDVisits();
   }, []);
 
@@ -69,7 +67,6 @@ export default function OPDPage() {
     setSelectedDoctor("");
     setQuery("");
     fetchOPDVisits();
-    router.push(`/receptionist/opd/${visit.id}/print`);
   }
 
   const statusColors: Record<string, string> = {
@@ -131,7 +128,7 @@ export default function OPDPage() {
       <div className="card p-0 overflow-hidden">
         <h2 className="text-lg font-semibold p-4 border-b">Today's OPD Queue</h2>
         <table className="data-table w-full">
-          <thead><tr><th>Token</th><th>Patient</th><th>Service</th><th>Doctor</th><th>Status</th></tr></thead>
+          <thead><tr><th>Token</th><th>Patient</th><th>Service</th><th>Doctor</th><th>Status</th><th>Print</th></tr></thead>
           <tbody>
             {visits.map(v => (
               <tr key={v.id}>
@@ -140,9 +137,10 @@ export default function OPDPage() {
                 <td>{v.serviceRate.name}</td>
                 <td>{v.doctor?.name || "—"}</td>
                 <td><span className={`text-xs px-2 py-1 rounded-full ${statusColors[v.status] || "bg-gray-50 text-gray-600"}`}>{v.status}</span></td>
+                <td><button onClick={() => window.open(`/receptionist/opd/${v.id}/print`, "_blank")} className="text-sm text-brand-600 hover:underline">Print</button></td>
               </tr>
             ))}
-            {visits.length === 0 && <tr><td colSpan={5} className="text-center text-gray-400 py-6">No OPD visits today</td></tr>}
+            {visits.length === 0 && <tr><td colSpan={6} className="text-center text-gray-400 py-6">No OPD visits today</td></tr>}
           </tbody>
         </table>
       </div>

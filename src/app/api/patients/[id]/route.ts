@@ -10,17 +10,25 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const role = (session.user as any).role;
   const { id } = await params;
 
-  // Doctors can only see patients they have an active OPD visit with
+  // Doctors can see patients they have any appointment or OPD visit with
   if (role === "DOCTOR") {
-    const hasAccess = await prisma.oPDVisit.findFirst({
+    const hasOPDAccess = await prisma.oPDVisit.findFirst({
       where: {
         patientId: id,
         doctorId: session.user.id,
         status: { in: ["WAITING", "IN_CONSULTATION"] }
       }
     });
-    if (!hasAccess) {
-      return NextResponse.json({ error: "Forbidden: You can only access your own OPD patients" }, { status: 403 });
+
+    const hasAnyAppointment = await prisma.appointment.findFirst({
+      where: {
+        patientId: id,
+        doctorId: session.user.id
+      }
+    });
+
+    if (!hasOPDAccess && !hasAnyAppointment) {
+      return NextResponse.json({ error: "Forbidden: You can only access your own patients" }, { status: 403 });
     }
   }
 

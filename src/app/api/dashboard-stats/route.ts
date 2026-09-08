@@ -9,28 +9,35 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const [patients, doctors, todayAppointments, unpaidInvoices, allMedicines, pendingLab] = await Promise.all([
+  const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
+  const todayEnd = new Date(new Date().setHours(23, 59, 59, 999));
+
+  const [patients, doctors, todayAppointments, unpaidInvoices, allMedicines, pendingLab, todayDispensed, todayInvoices] = await Promise.all([
     prisma.patient.count(),
     prisma.user.count({ where: { role: "DOCTOR" } }),
     prisma.appointment.count({
-      where: {
-        date: {
-          gte: new Date(new Date().setHours(0, 0, 0, 0)),
-          lte: new Date(new Date().setHours(23, 59, 59, 999))
-        }
-      }
+      where: { date: { gte: todayStart, lte: todayEnd } }
     }),
     prisma.invoice.aggregate({
       where: { status: { in: ["UNPAID", "PARTIAL"] } },
       _sum: { totalAmount: true, paidAmount: true }
     }),
     prisma.medicine.findMany({ select: { stock: true, reorderLevel: true } }),
-    prisma.labOrder.count({ where: { status: { in: ["PENDING", "IN_PROGRESS"] } } })
+    prisma.labOrder.count({ where: { status: { in: ["PENDING", "IN_PROGRESS"] } } }),
+    prisma.prescription.count({
+      where: { dispensed: true, dispensedAt: { gte: todayStart, lte: todayEnd } }
+    }),
+    prisma.invoice.findMany({
+      where: { createdAt: { gte: todayStart, lte: todayEnd } },
+      select: { totalAmount: true, paidAmount: true, status: true }
+    })
   ]);
 
   const lowStock = allMedicines.filter((m) => m.stock <= m.reorderLevel).length;
+  const todayEarnings = todayInvoices.reduce((sum, inv) => sum + (inv.paidAmount || 0), 0);
+  const todayRevenue = todayInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+  const todayPending = todayInvoices.filter(inv => inv.status === "UNPAID").length;
 
-  // revenue by day for the last 14 days
   const invoices = await prisma.invoice.findMany({
     where: { createdAt: { gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000) } },
     select: { createdAt: true, totalAmount: true }
@@ -49,6 +56,11 @@ export async function GET() {
     todayAppointments,
     outstanding,
     pendingLab,
+    todayDispensed,
+    todayEarnings,
+    todayRevenue,
+    todayPending,
+    lowStock,
     revenueByDay: Object.entries(revenueByDay).map(([date, amount]) => ({ date, amount }))
   });
 }

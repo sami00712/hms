@@ -28,6 +28,11 @@ export default function DoctorDashboard() {
   const [labOrderPatientId, setLabOrderPatientId] = useState("");
   const [labSaving, setLabSaving] = useState(false);
   const [labSuccess, setLabSuccess] = useState(false);
+  const [referModalPatientId, setReferModalPatientId] = useState<string | null>(null);
+  const [referModalPatientName, setReferModalPatientName] = useState("");
+  const [referTestSelection, setReferTestSelection] = useState("");
+  const [referSaving, setReferSaving] = useState(false);
+  const [referSuccess, setReferSuccess] = useState(false);
 
   useEffect(() => {
     fetch(`/api/appointments?date=${date}`).then(r => r.json()).then(setAppointments);
@@ -77,6 +82,60 @@ export default function DoctorDashboard() {
     }
   }
 
+  function openReferModal(patientId: string, patientName: string) {
+    setReferModalPatientId(patientId);
+    setReferModalPatientName(patientName);
+    setReferTestSelection("");
+    setReferSuccess(false);
+  }
+
+  function closeReferModal() {
+    setReferModalPatientId(null);
+    setReferModalPatientName("");
+    setReferTestSelection("");
+    setReferSuccess(false);
+  }
+
+  async function handleReferLabTest(e: React.FormEvent) {
+    e.preventDefault();
+    if (!referTestSelection || !referModalPatientId) return;
+    setReferSaving(true);
+    setReferSuccess(false);
+    const res = await fetch("/api/lab-orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ patientId: referModalPatientId, labTestId: referTestSelection })
+    });
+    setReferSaving(false);
+    if (res.ok) {
+      setReferSuccess(true);
+      setReferTestSelection("");
+    } else {
+      alert("Failed to order lab test");
+    }
+  }
+
+  async function handleAppointmentStatus(id: string, status: string) {
+    await fetch(`/api/appointments/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status })
+    });
+    setAppointments(appointments.map(a => a.id === id ? { ...a, status } : a));
+  }
+
+  function setQuickDate(offset: number) {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    setDate(d.toISOString().slice(0, 10));
+  }
+
+  const isToday = date === new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+  const isYesterday = date === yesterday.toISOString().slice(0, 10);
+  const lastWeek = new Date(); lastWeek.setDate(lastWeek.getDate() - 7);
+  const isLastWeek = date === lastWeek.toISOString().slice(0, 10);
+
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     if (query.length < 2) return;
@@ -84,6 +143,11 @@ export default function DoctorDashboard() {
       .then(r => r.json())
       .then(setPatients);
   }
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const completedCount = appointments.filter(a => a.status === "COMPLETED").length;
+  const cancelledCount = appointments.filter(a => a.status === "CANCELLED").length;
+  const scheduledCount = appointments.filter(a => a.status === "SCHEDULED").length;
 
   return (
     <div>
@@ -93,6 +157,40 @@ export default function DoctorDashboard() {
           <p className="text-gray-500">Patients scheduled with you</p>
         </div>
         <input type="date" className="input w-auto" value={date} onChange={e => setDate(e.target.value)} />
+      </div>
+
+      <div className="grid grid-cols-4 gap-4 mb-4">
+        <div className="card text-center">
+          <p className="text-sm text-gray-500">Total</p>
+          <p className="text-2xl font-bold">{appointments.length}</p>
+        </div>
+        <div className="card text-center">
+          <p className="text-sm text-gray-500">Scheduled</p>
+          <p className="text-2xl font-bold text-blue-600">{scheduledCount}</p>
+        </div>
+        <div className="card text-center">
+          <p className="text-sm text-gray-500">Completed</p>
+          <p className="text-2xl font-bold text-green-600">{completedCount}</p>
+        </div>
+        <div className="card text-center">
+          <p className="text-sm text-gray-500">Cancelled</p>
+          <p className="text-2xl font-bold text-red-600">{cancelledCount}</p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-4">
+        <button onClick={() => setQuickDate(0)} className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${isToday ? "bg-brand-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+          Today
+        </button>
+        <button onClick={() => setQuickDate(-1)} className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${isYesterday ? "bg-brand-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+          Yesterday
+        </button>
+        <button onClick={() => setQuickDate(1)} className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${date === new Date(Date.now() + 86400000).toISOString().slice(0, 10) ? "bg-brand-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+          Tomorrow
+        </button>
+        <button onClick={() => setQuickDate(-7)} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition">
+          Last 7 Days
+        </button>
       </div>
 
       <div className="flex gap-3 mb-6">
@@ -169,10 +267,36 @@ export default function DoctorDashboard() {
         </form>
       )}
 
+      {referModalPatientId && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
+            <h2 className="text-lg font-semibold mb-1">Refer Lab Test</h2>
+            <p className="text-sm text-gray-500 mb-4">Patient: <strong>{referModalPatientName}</strong></p>
+            {referSuccess && (
+              <div className="bg-green-50 text-green-600 text-sm px-3 py-2 rounded-lg mb-3">
+                Lab test ordered! Patient should go to Reception for billing, then to Lab for testing.
+              </div>
+            )}
+            <form onSubmit={handleReferLabTest} className="space-y-3">
+              <select className="input" value={referTestSelection} onChange={e => setReferTestSelection(e.target.value)}>
+                <option value="">Select test...</option>
+                {labTests.map(t => <option key={t.id} value={t.id}>{t.name} — PKR {t.price}</option>)}
+              </select>
+              <div className="flex gap-2 justify-end">
+                <button type="button" onClick={closeReferModal} className="btn-secondary">Close</button>
+                <button type="submit" disabled={referSaving || !referTestSelection} className="btn-primary">
+                  {referSaving ? "Ordering..." : "Order Test"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <div className="card p-0 overflow-hidden">
         <table className="data-table w-full">
           <thead>
-            <tr><th>Time</th><th>Patient</th><th>Reason</th><th>Status</th><th></th></tr>
+            <tr><th>Time</th><th>Patient</th><th>Reason</th><th>Status</th><th>Actions</th></tr>
           </thead>
           <tbody>
             {appointments.map((a) => (
@@ -181,14 +305,42 @@ export default function DoctorDashboard() {
                 <td>{a.patient.name} <span className="text-gray-400">({a.patient.mrNumber})</span></td>
                 <td>{a.reason || "-"}</td>
                 <td>
-                  <span className={`text-xs px-2 py-1 rounded-full ${a.status === "COMPLETED" ? "bg-green-50 text-green-600" : "bg-blue-50 text-blue-600"}`}>
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    a.status === "COMPLETED" ? "bg-green-50 text-green-600" :
+                    a.status === "CANCELLED" ? "bg-red-50 text-red-600" :
+                    "bg-blue-50 text-blue-600"
+                  }`}>
                     {a.status}
                   </span>
                 </td>
                 <td>
-                  <Link href={`/doctor/patients/${a.patient.id}?appointmentId=${a.id}`} className="text-brand-600 text-sm hover:underline">
-                    Open Chart
-                  </Link>
+                  <div className="flex gap-2 items-center">
+                    {a.status === "SCHEDULED" && (
+                      <>
+                        <button
+                          onClick={() => handleAppointmentStatus(a.id, "COMPLETED")}
+                          className="text-green-600 text-sm hover:underline font-medium"
+                        >
+                          Complete
+                        </button>
+                        <button
+                          onClick={() => handleAppointmentStatus(a.id, "CANCELLED")}
+                          className="text-red-500 text-sm hover:underline font-medium"
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    )}
+                    <Link href={`/doctor/patients/${a.patient.id}?appointmentId=${a.id}`} className="text-brand-600 text-sm hover:underline font-medium">
+                      Give Medicine
+                    </Link>
+                    <button
+                      onClick={() => openReferModal(a.patient.id, a.patient.name)}
+                      className="text-purple-600 text-sm hover:underline font-medium"
+                    >
+                      Refer Test
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

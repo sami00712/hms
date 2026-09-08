@@ -20,7 +20,10 @@ export default function PrintOPDPage() {
   useEffect(() => {
     fetch(`/api/opd-visits/${id}`)
       .then(r => r.json())
-      .then(setVisit);
+      .then(data => {
+        setVisit(data);
+        setTimeout(() => window.print(), 300);
+      });
   }, [id]);
 
   if (!visit) return <div className="py-8 text-center">Loading...</div>;

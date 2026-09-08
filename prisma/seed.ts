@@ -1,10 +1,15 @@
-import { PrismaClient, Role, ServiceCategory, BedStatus, WeekDay } from "@prisma/client";
+import { PrismaClient, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
 async function main() {
   const password = await bcrypt.hash("Password123!", 10);
+
+  const departments = ["OPD", "Gynae/Obs", "Cardiology", "Neurology", "Radiology/NICU", "Emergency"];
+  for (const d of departments) {
+    await prisma.department.upsert({ where: { name: d }, update: {}, create: { name: d } });
+  }
 
   const users = [
     { name: "Admin User", email: "admin@hms.com", role: Role.ADMIN },
@@ -13,13 +18,14 @@ async function main() {
     { name: "Lab Technician", email: "lab@hms.com", role: Role.LAB },
     { name: "Pharmacist", email: "pharmacy@hms.com", role: Role.PHARMACIST }
   ];
-
   for (const u of users) {
-    await prisma.user.upsert({
-      where: { email: u.email },
-      update: {},
-      create: { ...u, password }
-    });
+    await prisma.user.upsert({ where: { email: u.email }, update: {}, create: { ...u, password } });
+  }
+
+  const admin = await prisma.user.findFirst({ where: { role: Role.ADMIN } });
+  const opdDept = await prisma.department.findFirst({ where: { name: "OPD" } });
+  if (admin && opdDept) {
+    await prisma.user.update({ where: { id: admin.id }, data: { departmentId: opdDept.id } });
   }
 
   await prisma.labTest.createMany({
@@ -44,67 +50,17 @@ async function main() {
 
   await prisma.serviceRate.createMany({
     data: [
-      { name: "OPD Consultation - General", category: ServiceCategory.OPD_CONSULTATION, price: 1000 },
-      { name: "Follow-up Visit", category: ServiceCategory.FOLLOW_UP, price: 500 },
-      { name: "General Ward Bed / day", category: ServiceCategory.BED_CHARGE_PER_DAY, price: 2000 },
-      { name: "ICU Bed / day", category: ServiceCategory.BED_CHARGE_PER_DAY, price: 8000 }
+      { name: "OPD Consultation - General", category: "OPD_CONSULTATION", price: 1000 },
+      { name: "Follow-up Visit", category: "FOLLOW_UP", price: 500 },
+      { name: "General Ward Bed / day", category: "BED_CHARGE_PER_DAY", price: 2000 },
+      { name: "ICU Bed / day", category: "BED_CHARGE_PER_DAY", price: 8000 }
     ],
     skipDuplicates: true
   });
-
-  const generalWard = await prisma.ward.findFirst({ where: { name: "General Ward" } })
-    ?? await prisma.ward.create({ data: { name: "General Ward" } });
-  const icuWard = await prisma.ward.findFirst({ where: { name: "ICU" } })
-    ?? await prisma.ward.create({ data: { name: "ICU" } });
-  const maternityWard = await prisma.ward.findFirst({ where: { name: "Maternity" } })
-    ?? await prisma.ward.create({ data: { name: "Maternity" } });
-
-  for (let i = 1; i <= 10; i++) {
-    await prisma.bed.upsert({
-      where: { wardId_bedNumber: { wardId: generalWard.id, bedNumber: String(i) } },
-      update: {},
-      create: { wardId: generalWard.id, bedNumber: String(i), status: BedStatus.AVAILABLE }
-    });
-  }
-  for (let i = 1; i <= 4; i++) {
-    await prisma.bed.upsert({
-      where: { wardId_bedNumber: { wardId: icuWard.id, bedNumber: String(i) } },
-      update: {},
-      create: { wardId: icuWard.id, bedNumber: String(i), status: BedStatus.AVAILABLE }
-    });
-  }
-  for (let i = 1; i <= 6; i++) {
-    await prisma.bed.upsert({
-      where: { wardId_bedNumber: { wardId: maternityWard.id, bedNumber: String(i) } },
-      update: {},
-      create: { wardId: maternityWard.id, bedNumber: String(i), status: BedStatus.AVAILABLE }
-    });
-  }
-
-  // Seed doctor availability
-  const doctor = await prisma.user.findFirst({ where: { role: Role.DOCTOR } });
-  if (doctor) {
-    const days = [WeekDay.MONDAY, WeekDay.TUESDAY, WeekDay.WEDNESDAY, WeekDay.THURSDAY, WeekDay.FRIDAY];
-    for (const day of days) {
-      const existing = await prisma.doctorAvailability.findFirst({
-        where: { doctorId: doctor.id, day }
-      });
-      if (!existing) {
-        await prisma.doctorAvailability.create({
-          data: { doctorId: doctor.id, day, startTime: new Date("2026-09-07T09:00:00"), endTime: new Date("2026-09-07T17:00:00"), isAvailable: true }
-        });
-      }
-    }
-  }
 
   console.log("Seed complete. Default password for all accounts: Password123!");
 }
 
 main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+  .catch((e) => { console.error(e); process.exit(1); })
+  .finally(async () => { await prisma.$disconnect(); });

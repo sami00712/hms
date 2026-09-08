@@ -11,6 +11,7 @@ export async function GET() {
     name: session.user.name,
     email: session.user.email,
     role: (session.user as any).role,
-    specialty: (session.user as any).specialty
+    specialty: (session.user as any).specialty,
+    departmentId: (session.user as any).departmentId
   });
 }

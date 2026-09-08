@@ -6,7 +6,8 @@ const ROLE_PREFIX: Record<string, string> = {
   RECEPTIONIST: "/receptionist",
   DOCTOR: "/doctor",
   LAB: "/lab",
-  PHARMACIST: "/pharmacy"
+  PHARMACIST: "/pharmacy",
+  NURSE: "/receptionist"
 };
 
 export default withAuth(

@@ -20,17 +20,26 @@ export default function AppointmentsPage() {
   const [form, setForm] = useState({ patientId: "", doctorId: "", date: "", time: "", reason: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [dateFilter, setDateFilter] = useState(new Date().toISOString().slice(0, 10));
 
   useEffect(() => {
     fetch("/api/users").then((r) => r.json()).then((users) => {
       setDoctors(users.filter((u: any) => u.role === "DOCTOR" && u.active));
     }).catch(() => setDoctors([]));
-    loadAppointments();
   }, []);
 
+  useEffect(() => {
+    loadAppointments();
+  }, [dateFilter]);
+
   function loadAppointments() {
-    const today = new Date().toISOString().slice(0, 10);
-    fetch(`/api/appointments?date=${today}`).then((r) => r.json()).then(setAppointments);
+    fetch(`/api/appointments?date=${dateFilter}`).then((r) => r.json()).then(setAppointments);
+  }
+
+  function setQuickDate(offset: number) {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    setDateFilter(d.toISOString().slice(0, 10));
   }
 
   useEffect(() => {
@@ -129,7 +138,27 @@ export default function AppointmentsPage() {
       </form>
 
       <div className="card p-0 overflow-hidden">
-        <div className="px-4 py-3 border-b font-semibold text-sm">Today's Appointments</div>
+        <div className="px-4 py-3 border-b flex items-center justify-between">
+          <span className="font-semibold text-sm">Appointments</span>
+          <input type="date" className="input w-auto py-1 text-sm" value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
+        </div>
+        <div className="px-4 py-2 border-b flex flex-wrap gap-2">
+          <button onClick={() => setQuickDate(0)} className={`px-3 py-1 rounded-lg text-xs font-medium transition ${dateFilter === new Date().toISOString().slice(0, 10) ? "bg-brand-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+            Today
+          </button>
+          <button onClick={() => setQuickDate(-1)} className={`px-3 py-1 rounded-lg text-xs font-medium transition ${dateFilter === new Date(Date.now() - 86400000).toISOString().slice(0, 10) ? "bg-brand-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+            Yesterday
+          </button>
+          <button onClick={() => setQuickDate(1)} className={`px-3 py-1 rounded-lg text-xs font-medium transition ${dateFilter === new Date(Date.now() + 86400000).toISOString().slice(0, 10) ? "bg-brand-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+            Tomorrow
+          </button>
+          <button onClick={() => setQuickDate(-7)} className="px-3 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition">
+            Last 7 Days
+          </button>
+          <button onClick={() => { const d = new Date(); d.setDate(1); setDateFilter(d.toISOString().slice(0, 10)); }} className="px-3 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition">
+            This Month
+          </button>
+        </div>
         <table className="data-table w-full">
           <thead>
             <tr><th>Time</th><th>Patient</th><th>Doctor</th><th>Status</th></tr>
@@ -140,11 +169,15 @@ export default function AppointmentsPage() {
                 <td>{new Date(a.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</td>
                 <td>{a.patient.name} <span className="text-gray-400">({a.patient.mrNumber})</span></td>
                 <td>{a.doctor.name}</td>
-                <td><span className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-600">{a.status}</span></td>
+                <td><span className={`text-xs px-2 py-1 rounded-full ${
+                  a.status === "COMPLETED" ? "bg-green-50 text-green-600" :
+                  a.status === "CANCELLED" ? "bg-red-50 text-red-600" :
+                  "bg-blue-50 text-blue-600"
+                }`}>{a.status}</span></td>
               </tr>
             ))}
             {appointments.length === 0 && (
-              <tr><td colSpan={4} className="text-center text-gray-400 py-6">No appointments today</td></tr>
+              <tr><td colSpan={4} className="text-center text-gray-400 py-6">No appointments found</td></tr>
             )}
           </tbody>
         </table>

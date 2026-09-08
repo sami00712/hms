@@ -3,11 +3,15 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const tests = await prisma.labTest.findMany({ orderBy: { name: "asc" } });
+  const activeOnly = req.nextUrl.searchParams.get("active") === "true";
+  const tests = await prisma.labTest.findMany({
+    where: activeOnly ? { active: true } : undefined,
+    orderBy: { name: "asc" }
+  });
   return NextResponse.json(tests);
 }
 

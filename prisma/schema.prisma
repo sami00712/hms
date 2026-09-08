@@ -14,6 +14,8 @@ enum Role {
   DOCTOR
   LAB
   PHARMACIST
+  NURSE
+  MAINTENANCE
 }
 
 enum AppointmentStatus {
@@ -85,6 +87,9 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+
   appointmentsAsDoctor Appointment[]   @relation("DoctorAppointments")
   prescriptions        Prescription[]
   labOrdersRequested   LabOrder[]      @relation("DoctorLabOrders")
@@ -92,6 +97,10 @@ model User {
   opdVisitsAsDoctor    OPDVisit[]      @relation("DoctorOPDVisits")
   doctorAvailabilities DoctorAvailability[]
   notifications        Notification[]
+  maintenanceReported  MaintenanceRequest[] @relation("MaintenanceReportedBy")
+  maintenanceAssigned  MaintenanceRequest[] @relation("MaintenanceAssignedTo")
+  salaryRecords        SalaryRecord[]
+  issuesRaised         IssueAlert[]         @relation("IssueRaisedBy")
 }
 
 model Patient {
@@ -156,19 +165,20 @@ model InventoryTransaction {
 }
 
 model Prescription {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   patientId     String
-  patient       Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patient       Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
   doctorId      String
-  doctor        User     @relation(fields: [doctorId], references: [id])
+  doctor        User      @relation(fields: [doctorId], references: [id])
   appointmentId String?
   appointment   Appointment? @relation(fields: [appointmentId], references: [id])
   opdVisitId    String?
   opdVisit      OPDVisit? @relation(fields: [opdVisitId], references: [id])
   notes         String?
   diagnosis     String?
-  dispensed     Boolean  @default(false)
-  createdAt     DateTime @default(now())
+  dispensed     Boolean   @default(false)
+  dispensedAt   DateTime?
+  createdAt     DateTime  @default(now())
 
   items PrescriptionItem[]
 }
@@ -188,6 +198,7 @@ model LabTest {
   id        String     @id @default(cuid())
   name      String
   price     Float
+  active    Boolean    @default(true)
   createdAt DateTime   @default(now())
 
   labOrders LabOrder[]
@@ -203,6 +214,8 @@ model LabOrder {
   labTest     LabTest        @relation(fields: [labTestId], references: [id])
   opdVisitId  String?
   opdVisit    OPDVisit?      @relation(fields: [opdVisitId], references: [id])
+  invoiceId   String?
+  invoice     Invoice?       @relation(fields: [invoiceId], references: [id])
   status      LabOrderStatus @default(PENDING)
   result      String?
   resultFile  String?
@@ -221,7 +234,8 @@ model Invoice {
   sourceId    String?       // id of the OPDVisit / LabOrder / Prescription / Admission
   createdAt   DateTime      @default(now())
 
-  items InvoiceItem[]
+  items     InvoiceItem[]
+  labOrders LabOrder[]
 }
 
 model InvoiceItem {
@@ -315,4 +329,113 @@ model DoctorAvailability {
   updatedAt DateTime @updatedAt
 
   @@unique([doctorId, day])
+}
+
+enum MaintenanceCategory {
+  MACHINE_ELECTRIC
+  BED
+  MEDICAL_EQUIPMENT
+  FURNITURE
+  HVAC_AC
+  PLUMBING_WATER
+  FIRE_SAFETY
+  BUILDING_CIVIL
+  LABORATORY
+  OTHER
+}
+
+enum MaintenanceStatus {
+  REPORTED
+  SCHEDULED
+  IN_PROGRESS
+  RESOLVED
+  CANCELLED
+}
+
+enum Priority {
+  NORMAL
+  URGENT
+  MOST_URGENT
+}
+
+model MaintenanceAsset {
+  id           String               @id @default(cuid())
+  name         String
+  category     MaintenanceCategory
+  location     String?
+  purchaseDate DateTime?
+  notes        String?
+  createdAt    DateTime             @default(now())
+
+  requests MaintenanceRequest[]
+}
+
+model MaintenanceRequest {
+  id            String              @id @default(cuid())
+  assetId       String?
+  asset         MaintenanceAsset?   @relation(fields: [assetId], references: [id])
+  customLocation String?
+  category      MaintenanceCategory
+  customCategory String?
+  title         String
+  description   String?
+  priority      Priority            @default(NORMAL)
+  status        MaintenanceStatus   @default(REPORTED)
+  reportedById  String
+  reportedBy    User                @relation("MaintenanceReportedBy", fields: [reportedById], references: [id])
+  assignedToId  String?
+  assignedTo    User?               @relation("MaintenanceAssignedTo", fields: [assignedToId], references: [id])
+  reportedAt    DateTime            @default(now())
+  resolvedAt    DateTime?
+}
+
+model Department {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  createdAt     DateTime @default(now())
+
+  staff         User[]
+  nurses        Nurse[]
+  issueAlerts   IssueAlert[]
+}
+
+model SalaryRecord {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month       Int
+  year        Int
+  baseSalary  Float
+  bonus       Float    @default(0)
+  deductions  Float    @default(0)
+  netPay      Float
+  status      String   @default("UNPAID")
+  paidAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, month, year])
+}
+
+model IssueAlert {
+  id           String   @id @default(cuid())
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  title        String
+  description  String?
+  priority     Priority  @default(NORMAL)
+  resolved     Boolean   @default(false)
+  raisedById   String
+  raisedBy     User      @relation("IssueRaisedBy", fields: [raisedById], references: [id])
+  createdAt    DateTime  @default(now())
+  resolvedAt   DateTime?
+}
+
+model Nurse {
+  id           String      @id @default(cuid())
+  name         String
+  phone        String?
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  active       Boolean     @default(true)
+  createdAt    DateTime    @default(now())
 }

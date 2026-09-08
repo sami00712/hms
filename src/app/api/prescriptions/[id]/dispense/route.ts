@@ -36,7 +36,7 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     ]),
     prisma.prescription.update({
       where: { id: params.id },
-      data: { dispensed: true }
+      data: { dispensed: true, dispensedAt: new Date() }
     })
   ]);
 
